@@ -1,4 +1,4 @@
-# Trout Creek Karaoke
+# YouTube Karaoke
 
 A self-hosted karaoke system with a controller interface and a display mode for connecting to a TV or monitor.
 
