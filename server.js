@@ -89,13 +89,20 @@ app.get('/api/search', async (req, res) => {
 });
 
 // Queue management endpoints
+app.post('/api/queue/reset', (req, res) => {
+  videoQueue.length = 0;
+  currentVideo = null;
+  res.json({ current: null, next: [] });
+  broadcastQueue();
+});
+
 app.post('/api/queue/add', (req, res) => {
   const videoId = req.query.videoId;
   if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
-  if (!currentVideo) {
-    currentVideo = videoId;
-  } else {
-    videoQueue.push(videoId);
+  const wasEmpty = videoQueue.length === 0 && !currentVideo;
+  videoQueue.push(videoId);
+  if (wasEmpty) {
+    currentVideo = videoQueue[0];
   }
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
@@ -128,7 +135,15 @@ app.post('/api/queue/remove', (req, res) => {
   if (isNaN(i) || i < 0 || i >= videoQueue.length) {
     return res.status(400).json({ error: 'Invalid index' });
   }
+  const isCurrent = videoQueue[i] === currentVideo;
   videoQueue.splice(i, 1);
+  if (isCurrent) {
+    if (videoQueue.length > 0) {
+      currentVideo = videoQueue.shift();
+    } else {
+      currentVideo = null;
+    }
+  }
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
 });
@@ -166,6 +181,10 @@ app.get('/api/videos', async (req, res) => {
   }
 });
 
+
+app.get('/api/config', (req, res) => {
+  res.json({ title: process.env.APP_TITLE || 'Karaoke' });
+});
 
 app.listen(PORT, () => {
   console.log(`Karaoke server running at http://localhost:${PORT}`);
