@@ -3,19 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title></title>
+  <title>Now Playing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="player.css">
 </head>
 <body>
   <div class="waiting-bg" id="waitingBg">
-    <div class="icon">🎤</div>
-    <div class="text">Waiting for songs...</div>
+    <div class="waiting-inner">
+      <div class="waiting-icon">🎤</div>
+      <div class="waiting-text">Waiting for songs…</div>
+    </div>
   </div>
+
   <div id="player">
-    <div class="status" id="status">Connecting...</div>
+    <div class="status" id="status">Connecting…</div>
   </div>
+
   <div class="queue-display" id="queueDisplay">
-    <div class="queue-items" id="queueItems"></div>
+    <div class="queue-header">
+      <span class="queue-label">Next Up</span>
+    </div>
+    <div class="queue-scroll" id="queueItems">
+      <div class="empty-queue-msg">Queue is empty</div>
+    </div>
   </div>
 
   <script src="player.js"></script>

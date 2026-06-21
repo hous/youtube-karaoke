@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title></title>
+  <title>Karaoke</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="header">
-    <h1>🎤 <span class="title-text" id="appTitle"></span></h1>
+    <div class="header-top">
+      <span class="mic-emoji">🎤</span>
+      <h1><span class="title-text" id="appTitle"></span></h1>
+    </div>
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search for a song..." autocomplete="off">
       <button id="searchBtn" onclick="search()">Search</button>
@@ -24,7 +30,7 @@
         <div class="np-title" id="npTitle">-</div>
       </div>
       <div class="np-controls">
-        <button onclick="skipToNext()" title="Skip">&#x23ED;</button>
+        <button onclick="skipToNext()" title="Skip to next">&#x23ED;</button>
       </div>
     </div>
 
@@ -34,13 +40,15 @@
         <div class="panel-header">Results</div>
       </div>
       <div class="queue-panel">
-        <div class="panel-header">Queue (<span id="queueCount">0</span>)</div>
+        <div class="panel-header">
+          Queue <span id="queueCount">0</span>
+        </div>
         <div class="queue-list" id="queueList"></div>
       </div>
     </div>
   </div>
 
-  <a class="display-link" href="player.html" target="_blank" rel="noopener">Open Display</a>
+  <a class="display-link" href="player.html" target="_blank" rel="noopener">Open Display →</a>
 
   <script>
     fetch('/api/config').then(r => r.json()).then(data => {

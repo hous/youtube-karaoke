@@ -99,10 +99,10 @@ app.post('/api/queue/reset', (req, res) => {
 app.post('/api/queue/add', (req, res) => {
   const videoId = req.query.videoId;
   if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
-  const wasEmpty = videoQueue.length === 0 && !currentVideo;
-  videoQueue.push(videoId);
-  if (wasEmpty) {
-    currentVideo = videoQueue[0];
+  if (videoQueue.length === 0 && !currentVideo) {
+    currentVideo = videoId;
+  } else {
+    videoQueue.push(videoId);
   }
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
@@ -135,15 +135,7 @@ app.post('/api/queue/remove', (req, res) => {
   if (isNaN(i) || i < 0 || i >= videoQueue.length) {
     return res.status(400).json({ error: 'Invalid index' });
   }
-  const isCurrent = videoQueue[i] === currentVideo;
   videoQueue.splice(i, 1);
-  if (isCurrent) {
-    if (videoQueue.length > 0) {
-      currentVideo = videoQueue.shift();
-    } else {
-      currentVideo = null;
-    }
-  }
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
 });

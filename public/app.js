@@ -39,7 +39,7 @@ function renderSearchResults(items) {
     return;
   }
 
-  // Cache metadata
+  // Cache metadata from search results
   items.forEach(item => {
     const id = item.id.videoId;
     videoMetas[id] = {
@@ -124,6 +124,39 @@ function connectSSE() {
   };
 }
 
+// Fetch metadata for any videos that don't have it yet
+function fetchMissingMeta() {
+  const missingIds = [];
+  for (const vid of queue) {
+    if (vid !== currentVideo && !videoMetas[vid]) {
+      missingIds.push(vid);
+    }
+  }
+  // Also check current video
+  if (currentVideo && !videoMetas[currentVideo]) {
+    missingIds.push(currentVideo);
+  }
+  if (missingIds.length) {
+    // Deduplicate
+    const ids = [...new Set(missingIds)];
+    fetch('/api/videos?ids=' + ids.join(','))
+      .then(r => r.json())
+      .then(data => {
+        if (data.items) {
+          data.items.forEach(v => {
+            videoMetas[v.id] = {
+              title: v.snippet.title,
+              channel: v.snippet.channelTitle,
+              thumb: v.snippet.thumbnails.medium.url || v.snippet.thumbnails.default.url || ''
+            };
+          });
+          updateUI();
+        }
+      })
+      .catch(() => {});
+  }
+}
+
 // Update the UI with current state
 function updateUI() {
   const np = document.getElementById('nowPlaying');
@@ -165,11 +198,7 @@ function updateUI() {
   }
 }
 
-// Reset queue and start SSE connection on page load
-fetch('/api/queue/reset', { method: 'POST' }).then(() => {
-  currentVideo = null;
-  queue = [];
-  updateUI();
-}).finally(() => {
-  connectSSE();
-});
+// Start SSE connection on page load (no reset — the server owns the queue state)
+connectSSE();
+// Fetch missing metadata after a short delay
+setTimeout(fetchMissingMeta, 500);

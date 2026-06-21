@@ -8,6 +8,12 @@ var queueDisplay = document.getElementById('queueDisplay');
 var queueItemsEl = document.getElementById('queueItems');
 var videoMetas = {};
 
+// When a song starts playing, we set a timeout to auto-load the next queued song.
+// If the server sends a new `current` video via SSE before the timeout, it cancels
+// the fallback — the server is the source of truth for queue state.
+var endTimeout = null;
+var END_TIMEOUT_MS = 3000;
+
 function updateQueue() {
   if (!queueSongs || !queueSongs.length) {
     queueDisplay.classList.remove('visible');
@@ -36,34 +42,42 @@ function escapeHtml(s) {
 
 function loadVideo(videoId) {
   if (!ytPlayer || currentVideoId === videoId) return;
+  clearEndTimeout();
   currentVideoId = videoId;
   isPlaying = false;
   ytPlayer.loadVideoById(videoId);
+  ytPlayer.playVideo();
 }
 
-function startPlaying() {
-  if (!ytPlayer || !currentVideoId) return;
-  isPlaying = true;
-  waitingBg.style.display = 'none';
-  statusEl.style.display = 'none';
+function clearEndTimeout() {
+  if (endTimeout) {
+    clearTimeout(endTimeout);
+    endTimeout = null;
+  }
 }
 
-function handleSongEnd() {
-  var idx = -1;
-  for (var i = 0; i < queueSongs.length; i++) {
-    if (queueSongs[i] === currentVideoId) { idx = i; break; }
-  }
-  if (idx >= 0 && idx + 1 < queueSongs.length) {
-    loadVideo(queueSongs[idx + 1]);
-  } else {
-    currentVideoId = null;
-    isPlaying = false;
-    waitingBg.style.display = 'flex';
-    statusEl.style.display = 'block';
-    statusEl.textContent = 'Waiting for songs...';
-    statusEl.classList.remove('hidden');
-    updateQueue();
-  }
+function scheduleEndTimeout() {
+  clearEndTimeout();
+  endTimeout = setTimeout(function() {
+    endTimeout = null;
+    // Server didn't send a new current video in time — fall back to local queue.
+    var idx = queueSongs.indexOf(currentVideoId);
+    if (idx >= 0 && idx + 1 < queueSongs.length) {
+      loadVideo(queueSongs[idx + 1]);
+    } else {
+      showWaiting();
+    }
+  }, END_TIMEOUT_MS);
+}
+
+function showWaiting() {
+  currentVideoId = null;
+  isPlaying = false;
+  clearEndTimeout();
+  waitingBg.classList.remove('hidden');
+  statusEl.textContent = 'Waiting for songs...';
+  statusEl.classList.remove('hidden');
+  updateQueue();
 }
 
 function fetchMeta(ids) {
@@ -102,44 +116,63 @@ document.head.appendChild(s);
     playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0, fs: 0 },
     events: {
       onReady: function() {
+        // Don't reset — just connect SSE to get server's current state.
         var ev = new EventSource('/api/queue/stream');
         ev.onmessage = function(e) {
           var data = JSON.parse(e.data);
-          queueSongs = data.next || [];
-          if (data.current && data.current !== currentVideoId) {
-            loadVideo(data.current);
+
+          // Server cleared everything (song ended, no queue)
+          if (!data.current && (!data.next || !data.next.length)) {
+            showWaiting();
+            return;
           }
+
+          // Clear end timeout since server is in control of the queue
+          clearEndTimeout();
+
+          // New current video from server — load and play it
+          if (data.current && data.current !== currentVideoId) {
+            queueSongs = data.next || [];
+            loadVideo(data.current);
+          } else {
+            queueSongs = data.next || [];
+          }
+
+          // Update metadata
           if (queueSongs.length) {
             fetchMeta(queueSongs);
-          } else {
-            updateQueue();
           }
+          updateQueue();
         };
         ev.onerror = function() {
           statusEl.textContent = 'Reconnecting...';
-          statusEl.style.display = 'block';
           statusEl.classList.remove('hidden');
         };
       },
       onStateChange: function(data) {
         // data.state: 1=PLAYING, 2=PAUSED, 3=BUFFERING, 5=CUED, 0=ENDED
-        if (data.state === 1 && !isPlaying) {
-          // Video just started playing - unmute
-          startPlaying();
-        } else if (data.state === 1) {
+        if (data.state === 1) {
           isPlaying = true;
+          waitingBg.classList.add('hidden');
+          statusEl.classList.add('hidden');
+          // Start the fallback timeout: if the server doesn't send the next
+          // video within END_TIMEOUT_MS, assume the song ended and load from
+          // the local queue.
+          scheduleEndTimeout();
         } else if (data.state === 2 || data.state === 3) {
           isPlaying = false;
         } else if (data.state === 0) {
-          handleSongEnd();
+          clearEndTimeout();
+          // If the server already sent a new current video, SSE handler
+          // will take care of it. If not, the endTimeout will fire and
+          // fall back to the local queue.
         }
       }
     }
   });
 
-  waitingBg.style.display = 'flex';
-  statusEl.style.display = 'block';
-  statusEl.textContent = 'Connecting...';
+  waitingBg.classList.remove('hidden');
   statusEl.classList.remove('hidden');
+  statusEl.textContent = 'Connecting...';
   updateQueue();
 })();
