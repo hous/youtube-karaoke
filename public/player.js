@@ -1,4 +1,3 @@
-var ytPlayer = null;
 var currentVideoId = null;
 var queueSongs = [];
 var isPlaying = false;
@@ -40,13 +39,40 @@ function escapeHtml(s) {
           .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Direct iframe approach — no IFrame API needed for autoplay.
+// We create the iframe with autoplay+mute params which browsers accept.
+var iframeContainer = null;
+
 function loadVideo(videoId) {
-  if (!ytPlayer || currentVideoId === videoId) return;
-  clearEndTimeout();
+  if (currentVideoId === videoId) return;
   currentVideoId = videoId;
   isPlaying = false;
-  ytPlayer.loadVideoById(videoId);
-  ytPlayer.playVideo();
+  clearEndTimeout();
+
+  // Create new iframe with autoplay and mute
+  var iframe = document.createElement('iframe');
+  iframe.src = 'https://www.youtube.com/embed/' + videoId +
+    '?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&loop=0&playsinline=1';
+  iframe.width = '100%';
+  iframe.height = '100%';
+  iframe.frameBorder = '0';
+  iframe.allow = 'autoplay; encrypted-media';
+  iframe.allowFullscreen = false;
+  iframe.style.cssText = 'width:100%;height:100%;border:none;pointer-events:none;';
+
+  var playerEl = document.getElementById('player');
+  if (!playerEl) return;
+
+  iframeContainer = document.createElement('div');
+  iframeContainer.style.cssText = 'position:absolute;inset:0;z-index:1;';
+  iframeContainer.appendChild(iframe);
+  playerEl.appendChild(iframeContainer);
+
+  // Iframe loads instantly — start playing fallback
+  isPlaying = true;
+  waitingBg.classList.add('hidden');
+  statusEl.classList.add('hidden');
+  scheduleEndTimeout();
 }
 
 function clearEndTimeout() {
@@ -98,81 +124,42 @@ function fetchMeta(ids) {
     }).catch(function() {});
 }
 
-// Load YouTube IFrame API
-var s = document.createElement('script');
-s.src = 'https://www.youtube.com/iframe_api';
-document.head.appendChild(s);
+// Connect SSE to get server's current state.
+function connectSSE() {
+  var ev = new EventSource('/api/queue/stream');
+  ev.onmessage = function(e) {
+    var data = JSON.parse(e.data);
 
-// Poll until API is ready
-(function check() {
-  if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
-    setTimeout(check, 200);
-    return;
-  }
-
-  ytPlayer = new YT.Player('player', {
-    height: '100%',
-    width: '100%',
-    playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0, fs: 0 },
-    events: {
-      onReady: function() {
-        // Don't reset — just connect SSE to get server's current state.
-        var ev = new EventSource('/api/queue/stream');
-        ev.onmessage = function(e) {
-          var data = JSON.parse(e.data);
-
-          // Server cleared everything (song ended, no queue)
-          if (!data.current && (!data.next || !data.next.length)) {
-            showWaiting();
-            return;
-          }
-
-          // Clear end timeout since server is in control of the queue
-          clearEndTimeout();
-
-          // New current video from server — load and play it
-          if (data.current && data.current !== currentVideoId) {
-            queueSongs = data.next || [];
-            loadVideo(data.current);
-          } else {
-            queueSongs = data.next || [];
-          }
-
-          // Update metadata
-          if (queueSongs.length) {
-            fetchMeta(queueSongs);
-          }
-          updateQueue();
-        };
-        ev.onerror = function() {
-          statusEl.textContent = 'Reconnecting...';
-          statusEl.classList.remove('hidden');
-        };
-      },
-      onStateChange: function(data) {
-        // data.state: 1=PLAYING, 2=PAUSED, 3=BUFFERING, 5=CUED, 0=ENDED
-        if (data.state === 1) {
-          isPlaying = true;
-          waitingBg.classList.add('hidden');
-          statusEl.classList.add('hidden');
-          // Start the fallback timeout: if the server doesn't send the next
-          // video within END_TIMEOUT_MS, assume the song ended and load from
-          // the local queue.
-          scheduleEndTimeout();
-        } else if (data.state === 2 || data.state === 3) {
-          isPlaying = false;
-        } else if (data.state === 0) {
-          clearEndTimeout();
-          // If the server already sent a new current video, SSE handler
-          // will take care of it. If not, the endTimeout will fire and
-          // fall back to the local queue.
-        }
-      }
+    // Server cleared everything (song ended, no queue)
+    if (!data.current && (!data.next || !data.next.length)) {
+      showWaiting();
+      return;
     }
-  });
 
-  waitingBg.classList.remove('hidden');
-  statusEl.classList.remove('hidden');
-  statusEl.textContent = 'Connecting...';
-  updateQueue();
-})();
+    // Always sync state from server
+    clearEndTimeout();
+    queueSongs = data.next || [];
+
+    // Only create a new iframe if the current video actually changed
+    if (data.current && data.current !== currentVideoId) {
+      loadVideo(data.current);
+    } else {
+      // Queue changed but same video — just update metadata and UI
+      if (queueSongs.length) {
+        fetchMeta(queueSongs);
+      }
+      updateQueue();
+    }
+  };
+  ev.onerror = function() {
+    statusEl.textContent = 'Reconnecting...';
+    statusEl.classList.remove('hidden');
+  };
+}
+
+// Start the app — connect SSE immediately (no IFrame API needed).
+waitingBg.classList.remove('hidden');
+statusEl.classList.remove('hidden');
+statusEl.textContent = 'Connecting...';
+updateQueue();
+connectSSE();

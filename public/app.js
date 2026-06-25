@@ -2,6 +2,7 @@ let queue = [];
 let currentVideo = null;
 let videoMetas = {}; // cached {videoId: {title, channel, thumb}}
 let source = null;
+let firstResultId = null; // first search result for "Play Now"
 
 const searchInput = document.getElementById('searchInput');
 const searchPanel = document.getElementById('searchPanel');
@@ -17,6 +18,9 @@ function search() {
   if (!q) return;
   searchBtn.disabled = true;
   searchBtn.textContent = '...';
+  firstResultId = null;
+  const playBtn = document.getElementById('startPlayBtn');
+  if (playBtn) playBtn.style.display = 'none';
   searchPanel.innerHTML = '<div class="panel-header">Results</div><div class="loading">Searching...</div>';
 
   const karaokeQ = `${q} instrumental karaoke (lyrics)`;
@@ -38,6 +42,11 @@ function renderSearchResults(items) {
     searchPanel.innerHTML = '<div class="panel-header">Results</div><div class="loading">No results found.</div>';
     return;
   }
+
+  // Store first result for play button
+  firstResultId = items[0].id.videoId;
+  const playBtn = document.getElementById('startPlayBtn');
+  if (playBtn) playBtn.style.display = 'flex';
 
   // Cache metadata from search results
   items.forEach(item => {
@@ -93,6 +102,33 @@ function skipToNext() {
     })
     .catch(err => console.error('Failed to skip:', err));
 }
+
+function playFirstResult() {
+  if (!firstResultId) return;
+  fetch('/api/queue/reset', { method: 'POST' })
+    .then(() => fetch('/api/queue/add?videoId=' + encodeURIComponent(firstResultId), { method: 'POST' }))
+    .then(r => r.json())
+    .then(data => {
+      currentVideo = data.current;
+      queue = data.next;
+      updateUI();
+      // Brief visual feedback
+      const playBtn = document.getElementById('playFirstBtn');
+      if (playBtn) {
+        playBtn.textContent = '▶ Playing!';
+        setTimeout(() => { playBtn.textContent = '▶ Play Now'; }, 2000);
+      }
+    })
+    .catch(err => console.error('Failed to play:', err));
+}
+
+// Also allow Enter key on play button
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.id === 'searchInput') {
+    e.preventDefault();
+    search();
+  }
+});
 
 function removeFromQueue(index) {
   fetch(`/api/queue/remove?index=${index}`, { method: 'POST' })

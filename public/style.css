@@ -20,6 +20,7 @@ body {
 
 /* ─── Header ─── */
 .header {
+  position: relative;
   padding: 16px 24px;
   background: linear-gradient(180deg, rgba(255, 45, 120, 0.08) 0%, transparent 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -49,6 +50,34 @@ body {
 .mic-emoji {
   font-size: 28px;
   flex-shrink: 0;
+}
+
+.start-play-btn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 45, 120, 0.06);
+  color: rgba(255, 45, 120, 0.35);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.start-play-btn:hover {
+  background: rgba(255, 45, 120, 0.1);
+  color: rgba(255, 45, 120, 0.5);
+}
+
+.start-play-btn:active {
+  transform: scale(0.95);
 }
 
 .search-row {
@@ -224,6 +253,35 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.play-now-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ff2d78, #e61960);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 12px rgba(255, 45, 120, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.play-now-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(255, 45, 120, 0.35);
+}
+
+.play-now-btn:active {
+  transform: translateY(0);
 }
 
 /* ─── Queue panel ─── */
