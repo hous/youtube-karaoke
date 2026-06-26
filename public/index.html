@@ -59,5 +59,31 @@
     });
   </script>
   <script src="app.js"></script>
+
+  <!-- Name Entry Modal -->
+  <div class="modal-overlay" id="nameModal">
+    <div class="modal-card">
+      <div class="modal-song-info">
+        <img class="modal-song-thumb" id="modalThumb" src="" alt="">
+        <div class="modal-song-title" id="modalSongTitle">-</div>
+        <div class="modal-song-channel" id="modalSongChannel">-</div>
+      </div>
+
+      <div class="modal-label">Your Name (optional)</div>
+      <input type="text" class="modal-name-input" id="modalNameInput" placeholder="Enter your name..." maxlength="30" autocomplete="off">
+
+      <div class="modal-autocomplete" id="modalAutocomplete">
+        <div class="modal-autocomplete-list" id="modalAutocompleteList"></div>
+      </div>
+
+      <div class="modal-recent-label">Recent singers</div>
+      <div class="modal-recent-names" id="modalRecentNames"></div>
+
+      <div class="modal-actions">
+        <button class="modal-btn-skip" id="modalSkipBtn">Just add song</button>
+        <button class="modal-btn-add" id="modalAddBtn">Add to Queue</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

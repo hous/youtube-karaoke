@@ -11,14 +11,62 @@
 </head>
 <body>
   <div class="waiting-bg" id="waitingBg">
+    <!-- Animated gradient blobs -->
+    <div class="waiting-bg-blob waiting-blob-1"></div>
+    <div class="waiting-bg-blob waiting-blob-2"></div>
+    <div class="waiting-bg-blob waiting-blob-3"></div>
+
+    <!-- Floating musical notes -->
+    <div class="waiting-notes" id="waitingNotes">
+      <span class="waiting-note" style="left:10%; top:20%; animation-delay:0s;">♫</span>
+      <span class="waiting-note" style="left:80%; top:15%; animation-delay:1.2s;">♬</span>
+      <span class="waiting-note" style="left:25%; top:70%; animation-delay:2.4s;">♫</span>
+      <span class="waiting-note" style="left:70%; top:65%; animation-delay:0.8s;">♪</span>
+      <span class="waiting-note" style="left:50%; top:30%; animation-delay:3.6s;">♫</span>
+      <span class="waiting-note" style="left:15%; top:50%; animation-delay:1.8s;">♬</span>
+      <span class="waiting-note" style="left:85%; top:45%; animation-delay:4.2s;">♫</span>
+      <span class="waiting-note" style="left:40%; top:80%; animation-delay:2.8s;">♪</span>
+    </div>
+
     <div class="waiting-inner">
       <div class="waiting-icon">🎤</div>
       <div class="waiting-text">Waiting for songs…</div>
+    </div>
+
+    <!-- Animated equalizer bars -->
+    <div class="waiting-eq" id="waitingEq">
+      <div class="waiting-eq-bar" style="--i:0"></div>
+      <div class="waiting-eq-bar" style="--i:1"></div>
+      <div class="waiting-eq-bar" style="--i:2"></div>
+      <div class="waiting-eq-bar" style="--i:3"></div>
+      <div class="waiting-eq-bar" style="--i:4"></div>
+      <div class="waiting-eq-bar" style="--i:5"></div>
+      <div class="waiting-eq-bar" style="--i:6"></div>
+      <div class="waiting-eq-bar" style="--i:7"></div>
+      <div class="waiting-eq-bar" style="--i:8"></div>
+      <div class="waiting-eq-bar" style="--i:9"></div>
+      <div class="waiting-eq-bar" style="--i:10"></div>
+      <div class="waiting-eq-bar" style="--i:11"></div>
+      <div class="waiting-eq-bar" style="--i:12"></div>
+      <div class="waiting-eq-bar" style="--i:13"></div>
+      <div class="waiting-eq-bar" style="--i:14"></div>
+      <div class="waiting-eq-bar" style="--i:15"></div>
+      <div class="waiting-eq-bar" style="--i:16"></div>
+      <div class="waiting-eq-bar" style="--i:17"></div>
+      <div class="waiting-eq-bar" style="--i:18"></div>
+      <div class="waiting-eq-bar" style="--i:19"></div>
     </div>
   </div>
 
   <div id="player">
     <div class="status" id="status">Connecting…</div>
+    <!-- Flashy singer overlay -->
+    <div class="singer-overlay" id="singerOverlay">
+      <div class="singer-strip">
+        <div class="singer-line" id="singerLine1"></div>
+        <div class="singer-line" id="singerLine2"></div>
+      </div>
+    </div>
   </div>
 
   <div class="queue-display" id="queueDisplay">
@@ -27,6 +75,14 @@
     </div>
     <div class="queue-scroll" id="queueItems">
       <div class="empty-queue-msg">Queue is empty</div>
+    </div>
+  </div>
+
+  <!-- One-time tap to unlock audio on mobile -->
+  <div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);cursor:pointer;">
+    <div style="text-align:center;color:#fff;">
+      <div style="font-size:64px;margin-bottom:16px;">🎤</div>
+      <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;">Tap to Start</div>
     </div>
   </div>
 

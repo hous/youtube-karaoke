@@ -8,26 +8,21 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const videoQueue = []; // array of {videoId, singer}
-let currentVideo = null; // {videoId, singer} or null
+// videoQueue holds all songs including the currently playing one at index 0.
+// currentVideo always points to videoQueue[0] (or null when empty).
+const videoQueue = [];
+let currentVideo = null;
 
 const app = express();
 
-// Serve static assets (HTML, JS, CSS)
 app.use(express.static('public'));
 
-// SSE clients list for queue updates
 let sseClients = [];
 
 function broadcastQueue() {
-  // Include current song in next so the player has the full queue
-  // for end-of-song lookup (finds currentVideoId, loads next item).
-  const nextWithCurrent = currentVideo
-    ? [currentVideo, ...videoQueue]
-    : videoQueue;
   const payload = {
     current: currentVideo ? { videoId: currentVideo.videoId, singer: currentVideo.singer } : null,
-    next: nextWithCurrent,
+    next: videoQueue,
   };
   sseClients.forEach(res => {
     try {
@@ -38,8 +33,6 @@ function broadcastQueue() {
   });
 }
 
-
-
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 if (!YOUTUBE_API_KEY) {
   console.error('ERROR: Set YOUTUBE_API_KEY environment variable');
@@ -49,8 +42,6 @@ if (!YOUTUBE_API_KEY) {
 app.use(cors());
 const PORT = process.env.PORT || 3000;
 
-
-// Existing search endpoint remains unchanged
 app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Missing query' });
@@ -96,7 +87,6 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// Queue management endpoints
 app.post('/api/queue/reset', (req, res) => {
   videoQueue.length = 0;
   currentVideo = null;
@@ -109,68 +99,54 @@ app.post('/api/queue/add', (req, res) => {
   if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
   const singer = req.query.singer || '';
   const entry = { videoId, singer: singer || undefined };
-  // Set currentVideo only if nothing is playing, but always push to queue.
-  // The broadcast includes currentVideo in `next`, so the player has the
-  // full queue for end-of-song lookup regardless of server state.
-  if (!currentVideo) {
-    currentVideo = entry;
-  }
   videoQueue.push(entry);
+  if (!currentVideo) {
+    currentVideo = videoQueue[0];
+  }
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
 });
 
 app.post('/api/queue/remove', (req, res) => {
-  const { index } = req.query;
-  const i = parseInt(index);
+  const i = parseInt(req.query.index);
   if (isNaN(i) || i < 0 || i >= videoQueue.length) {
     return res.status(400).json({ error: 'Invalid index' });
   }
   videoQueue.splice(i, 1);
+  // If the currently playing song was removed, advance to whatever is now at index 0
+  if (i === 0) {
+    currentVideo = videoQueue.length > 0 ? videoQueue[0] : null;
+  }
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
 });
 
 app.post('/api/queue/next', (req, res) => {
-  // Advance to the next song in the queue.
-  // Only update currentVideo — don't mutate the queue.
-  // The player uses the server's full broadcast (current + next)
-  // to find and load the next song via its end-of-song timeout.
-  if (videoQueue.length > 0) {
-    currentVideo = videoQueue[0];
-  } else {
-    currentVideo = null;
-  }
+  // Shift the current song off the front of the queue and advance
+  if (videoQueue.length > 0) videoQueue.shift();
+  currentVideo = videoQueue.length > 0 ? videoQueue[0] : null;
   res.json({ current: currentVideo, next: videoQueue });
   broadcastQueue();
 });
 
-// SSE endpoint for real‑time queue updates
 app.get('/api/queue/stream', (req, res) => {
-  // Set headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.flushHeaders();
 
-  // Send initial state — use same format as broadcasts
-  const initNext = currentVideo ? [currentVideo, ...videoQueue] : videoQueue;
   const initPayload = {
     current: currentVideo,
-    next: initNext,
+    next: videoQueue,
   };
   res.write(`data: ${JSON.stringify(initPayload)}\n\n`);
 
-  // Register client
   sseClients.push(res);
 
-  // Remove client on disconnect
   req.on('close', () => {
     sseClients = sseClients.filter(r => r !== res);
   });
 });
 
-
-// Video details endpoint
 app.get('/api/videos', async (req, res) => {
   const { ids } = req.query;
   if (!ids) return res.status(400).json({ error: 'Missing video IDs' });
@@ -192,7 +168,6 @@ app.get('/api/videos', async (req, res) => {
     res.status(500).json({ error: 'Video lookup failed', message: err.message });
   }
 });
-
 
 app.get('/api/config', (req, res) => {
   res.json({ title: process.env.APP_TITLE || 'Karaoke' });

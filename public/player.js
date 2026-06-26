@@ -35,20 +35,37 @@ if ('speechSynthesis' in window) {
   };
 }
 
-// ─── Video player (direct iframe for reliable autoplay) ───
+// ─── Audio unlock (mobile browsers require a user gesture on this page) ───
+var audioUnlocked = false;
+var pendingVideoId = null;
+
+document.getElementById('audioUnlock').addEventListener('click', function() {
+  audioUnlocked = true;
+  this.style.display = 'none';
+  if (pendingVideoId) {
+    var id = pendingVideoId;
+    pendingVideoId = null;
+    loadVideo(id);
+  }
+});
+
+// ─── Video player ───
 var iframeContainer = null;
-var unmuteAttempted = false;
 
 function loadVideo(videoId) {
+  if (!audioUnlocked) {
+    // Queue the video — will play as soon as the user taps the unlock screen
+    pendingVideoId = videoId;
+    return;
+  }
   if (currentVideoId === videoId) return;
   currentVideoId = videoId;
   isPlaying = false;
   clearEndTimeout();
 
-  // Create new iframe with autoplay and mute
   var iframe = document.createElement('iframe');
   iframe.src = 'https://www.youtube.com/embed/' + videoId +
-    '?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1';
+    '?autoplay=1&mute=0&controls=0&modestbranding=1&rel=0&playsinline=1';
   iframe.width = '100%';
   iframe.height = '100%';
   iframe.frameBorder = '0';
@@ -59,47 +76,20 @@ function loadVideo(videoId) {
   var playerEl = document.getElementById('player');
   if (!playerEl) return;
 
+  if (iframeContainer) {
+    playerEl.removeChild(iframeContainer);
+  }
+
   iframeContainer = document.createElement('div');
   iframeContainer.style.cssText = 'position:absolute;inset:0;z-index:1;';
   iframeContainer.appendChild(iframe);
   playerEl.appendChild(iframeContainer);
 
-  // Iframe loads instantly — start playing fallback
   isPlaying = true;
   waitingBg.classList.add('hidden');
   statusEl.classList.add('hidden');
   scheduleEndTimeout();
-
-  // Try to unmute after a short delay (user has already interacted with the page by now)
-  if (!unmuteAttempted) {
-    unmuteAttempted = true;
-    tryUnmute();
-  }
 }
-
-function tryUnmute() {
-  // Load the YouTube IFrame API to attempt unmute
-  var tag = document.createElement('script');
-  tag.src = 'https://www.youtube.com/iframe_api';
-  var firstScript = document.getElementsByTagName('script')[0];
-  firstScript.parentNode.insertBefore(tag, firstScript);
-}
-
-window.onYouTubeIframeAPIReady = function() {
-  if (!iframeContainer || unmuteAttempted) return;
-  unmuteAttempted = true;
-
-  var player = new YT.Player(iframeContainer, {
-    videoId: currentVideoId,
-    playerVars: { autoplay: 1 },
-    events: {
-      onReady: function(event) {
-        event.target.unMute();
-        event.target.setVolume(100);
-      }
-    }
-  });
-};
 
 // ─── Singer Overlay ───
 var overlayTimeout = null;
@@ -107,13 +97,8 @@ var overlayTimeout = null;
 function showSingerOverlay(singer, title) {
   if (overlayTimeout) clearTimeout(overlayTimeout);
 
-  if (singer) {
-    singerLine1.textContent = singer;
-    singerLine2.textContent = title || '';
-  } else {
-    singerLine1.textContent = '';
-    singerLine2.textContent = title || '';
-  }
+  singerLine1.textContent = singer || '';
+  singerLine2.textContent = title || '';
 
   singerOverlay.classList.add('visible');
   overlayTimeout = setTimeout(function() {
@@ -130,9 +115,12 @@ function hideSingerOverlay() {
   }
 }
 
-// ─── End timeout ───
+// ─── End-of-song timeout ───
+// queueSongs[0] is always the currently playing song.
+// When it ends, load queueSongs[1] (if present) by calling /api/queue/next
+// which shifts the server queue, then the resulting SSE update loads the new video.
 var endTimeout = null;
-var END_TIMEOUT_MS = 3000;
+var END_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes as safety fallback
 
 function clearEndTimeout() {
   if (endTimeout) {
@@ -145,32 +133,13 @@ function scheduleEndTimeout() {
   clearEndTimeout();
   endTimeout = setTimeout(function() {
     endTimeout = null;
-    // Find current song in the combined queue (current + next from server).
-    // The server broadcast includes currentVideo in `next` so we can locate
-    // the currently playing song and advance to the next one.
-    for (var i = 0; i < queueSongs.length; i++) {
-      if (queueSongs[i].videoId === currentVideoId) {
-        // Skip same song (handles skip button desync).
-        var j = i + 1;
-        while (j < queueSongs.length && queueSongs[j].videoId === currentVideoId) {
-          j++;
-        }
-        if (j < queueSongs.length) {
-          var next = queueSongs[j];
-          loadVideo(next.videoId);
-          showSingerOverlay(next.singer, (videoMetas[next.videoId] || {}).title);
-          if (next.singer) {
-            speak(next.singer + ', ' + (videoMetas[next.videoId] || {}).title);
-          }
-        } else {
-          showWaiting();
-        }
-        return;
-      }
-    }
-    // currentVideoId not found in queue — show waiting.
-    showWaiting();
+    advanceQueue();
   }, END_TIMEOUT_MS);
+}
+
+function advanceQueue() {
+  fetch('/api/queue/next', { method: 'POST' })
+    .catch(function() {});
 }
 
 function showWaiting() {
@@ -185,7 +154,7 @@ function showWaiting() {
   updateQueue();
 }
 
-// ─── Queue ───
+// ─── Queue display ───
 function updateQueue() {
   if (!queueSongs || !queueSongs.length) {
     queueDisplay.classList.remove('visible');
@@ -198,7 +167,7 @@ function updateQueue() {
     var item = queueSongs[i];
     var vid = item.videoId;
     var m = videoMetas[vid] || { title: 'Loading...', thumb: '' };
-    var cls = vid === currentVideoId ? ' now-playing' : '';
+    var cls = i === 0 ? ' now-playing' : '';
     var singerHtml = item.singer
       ? '<div class="queue-song-singer">' + escapeHtml(item.singer) + '</div>'
       : '';
@@ -246,7 +215,6 @@ function connectSSE() {
       return;
     }
 
-    clearEndTimeout();
     queueSongs = data.next || [];
 
     var newVideoId = data.current ? data.current.videoId : null;
@@ -254,6 +222,7 @@ function connectSSE() {
     var newTitle = (data.current && videoMetas[newVideoId]) ? videoMetas[newVideoId].title : '';
 
     if (newVideoId && newVideoId !== currentVideoId) {
+      clearEndTimeout();
       loadVideo(newVideoId);
       currentSinger = newSinger || null;
 
@@ -265,17 +234,15 @@ function connectSSE() {
         }
       }
     } else {
-      // Same video still playing — just update metadata and UI
-      if (queueSongs.length) {
-        var missingIds = [];
-        for (var i = 0; i < queueSongs.length; i++) {
-          if (!videoMetas[queueSongs[i].videoId]) {
-            missingIds.push(queueSongs[i].videoId);
-          }
+      // Same video still playing — update queue display only
+      var missingIds = [];
+      for (var i = 0; i < queueSongs.length; i++) {
+        if (!videoMetas[queueSongs[i].videoId]) {
+          missingIds.push(queueSongs[i].videoId);
         }
-        if (missingIds.length) fetchMeta(missingIds);
       }
-      updateQueue();
+      if (missingIds.length) fetchMeta(missingIds);
+      else updateQueue();
     }
   };
   ev.onerror = function() {
