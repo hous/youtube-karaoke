@@ -251,6 +251,21 @@ function connectSSE() {
   };
 }
 
+// ─── Cross-page stop signal ───
+var stopKey = 'karaoke_stop';
+var prevStopVal = localStorage.getItem(stopKey);
+
+window.addEventListener('storage', function(e) {
+  if (e.key === stopKey) {
+    showWaiting();
+  }
+});
+
+// Also check on load in case the signal was sent before this page opened
+if (localStorage.getItem(stopKey) !== prevStopVal) {
+  showWaiting();
+}
+
 // Start
 waitingBg.classList.remove('hidden');
 statusEl.classList.remove('hidden');

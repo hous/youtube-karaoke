@@ -278,6 +278,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ─── Queue management ───
 function skipToNext() {
+  const isLastSong = queue.length <= 1;
+  // Tell player.html to stop immediately (before HTTP round-trip)
+  if (isLastSong) {
+    localStorage.setItem('karaoke_stop', Date.now().toString());
+  }
   fetch('/api/queue/next', { method: 'POST' })
     .then(r => r.json())
     .then(data => {
