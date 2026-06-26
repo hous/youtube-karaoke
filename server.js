@@ -61,25 +61,58 @@ app.get('/api/search', async (req, res) => {
       return res.status(400).json(searchData.error);
     }
 
-    const ids = searchData.items.map(i => i.id.videoId).join(',');
-    const videoUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    videoUrl.searchParams.set('part', 'status');
-    videoUrl.searchParams.set('id', ids);
-    videoUrl.searchParams.set('key', YOUTUBE_API_KEY);
-
-    const videoResponse = await fetch(videoUrl.toString());
-    const videoData = await videoResponse.json();
-
-    const embeddableMap = {};
-    if (videoData.items) {
-      videoData.items.forEach(v => {
-        embeddableMap[v.id] = v.status.embeddable;
-      });
+    const allIds = searchData.items.map(i => i.id.videoId);
+    // YouTube videos.list caps at 20 IDs per request — batch them
+    const batches = [];
+    for (let i = 0; i < allIds.length; i += 20) {
+      batches.push(allIds.slice(i, i + 20));
     }
 
-    searchData.items = searchData.items.filter(item =>
-      embeddableMap[item.id.videoId] !== false
-    );
+    const videoUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+    videoUrl.searchParams.set('part', 'status,contentDetails');
+    videoUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+    const embeddableMap = {};
+    const regionRestricted = new Set();
+
+    for (const batch of batches) {
+      videoUrl.searchParams.set('id', batch.join(','));
+      const videoResponse = await fetch(videoUrl.toString());
+      const videoData = await videoResponse.json();
+
+      if (videoData.items) {
+        for (const v of videoData.items) {
+          embeddableMap[v.id] = v.status?.embeddable;
+          const restriction = v.contentDetails?.regionRestriction;
+          if (restriction) {
+            // regionRestriction is present — the video is blocked in some region(s).
+            if (restriction.restrictedOn?.length > 0) {
+              regionRestricted.add(v.id);
+            } else if (restriction.unrestrictedOn?.length > 0 && restriction.unrestrictedOn.length < 250) {
+              regionRestricted.add(v.id);
+            } else {
+              // Empty regionRestriction object — API can't determine countries.
+              // Block conservatively (video is restricted somewhere).
+              regionRestricted.add(v.id);
+            }
+          }
+        }
+      }
+    }
+
+    // Allowed channels — case-insensitive, ignore whitespace
+    const ALLOWED_CHANNELS = ['singking', 'karafun'];
+    const matchesChannel = (title) => {
+      const t = title.toLowerCase().replace(/\s/g, '');
+      return ALLOWED_CHANNELS.some(c => t.includes(c));
+    };
+
+    searchData.items = searchData.items.filter(item => {
+      const id = item.id.videoId;
+      return embeddableMap[id] !== false
+        && !regionRestricted.has(id)
+        && matchesChannel(item.snippet.channelTitle);
+    });
 
     res.json(searchData);
   } catch (err) {
@@ -152,18 +185,28 @@ app.get('/api/videos', async (req, res) => {
   if (!ids) return res.status(400).json({ error: 'Missing video IDs' });
 
   try {
+    const idsList = ids.split(',');
+    const batches = [];
+    for (let i = 0; i < idsList.length; i += 20) {
+      batches.push(idsList.slice(i, i + 20));
+    }
+
     const url = new URL('https://www.googleapis.com/youtube/v3/videos');
     url.searchParams.set('part', 'snippet,status');
-    url.searchParams.set('id', ids);
     url.searchParams.set('key', YOUTUBE_API_KEY);
 
-    const response = await fetch(url.toString());
-    const data = await response.json();
-
-    if (data.items) {
-      data.items = data.items.filter(v => v.status.embeddable === true);
+    const allItems = [];
+    for (const batch of batches) {
+      url.searchParams.set('id', batch.join(','));
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      if (data.items) {
+        allItems.push(...data.items);
+      }
     }
-    res.json(data);
+
+    allItems.sort((a, b) => idsList.indexOf(a.id) - idsList.indexOf(b.id));
+    res.json({ items: allItems.filter(v => v.status?.embeddable === true) });
   } catch (err) {
     res.status(500).json({ error: 'Video lookup failed', message: err.message });
   }
